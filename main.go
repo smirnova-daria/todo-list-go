@@ -1,10 +1,12 @@
 package main
 
 import (
+	"database/sql"
+	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 type Task struct {
@@ -13,41 +15,49 @@ type Task struct {
 	Done bool   `json:"done"`
 }
 
-var tasks = []Task{
-	{ID: 1, Text: "todo number 1", Done: true},
-	{ID: 2, Text: "todo №2", Done: false},
-}
-
 func main() {
-	r := gin.Default()
-	r.GET("/tasks", GetTasks)
-	r.GET("/tasks/:id", GetTaskByID)
-	r.Run()
-}
-
-func GetTasks(c *gin.Context) {
-	c.JSON(http.StatusOK, tasks)
-}
-
-func GetTaskByID(c *gin.Context) {
-	id, err := strconv.Atoi(c.Param("id"))
+	db, err := sql.Open("sqlite3", "tasks.db")
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"message": "invalid id parameter"})
-		return
+		log.Fatal(err)
 	}
-	task, ok := findTaskByID(id)
-	if !ok {
-		c.JSON(http.StatusNotFound, gin.H{"message": "not found"})
-		return
-	}
-	c.JSON(http.StatusOK, task)
-}
+	defer db.Close()
 
-func findTaskByID(id int) (Task, bool) {
-	for _, task := range tasks {
-		if task.ID == id {
-			return task, true
-		}
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS tasks (  
+			id INTEGER PRIMARY KEY AUTOINCREMENT,  
+			text TEXT NOT NULL,  
+			done BOOLEAN DEFAULT FALSE  
+		) 
+	`)
+	if err != nil {
+		log.Fatal(err)
 	}
-	return Task{}, false
+
+	r := gin.Default()
+	r.GET("/tasks", func(ctx *gin.Context) {
+		rows, err := db.Query("SELECT id, text, done FROM tasks")
+		if err != nil {
+			log.Printf("get tasks, err: %v", err.Error())
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
+			return
+		}
+		defer rows.Close()
+		var tasks []Task
+		for rows.Next() {
+			var task Task
+			err := rows.Scan(&task.ID, &task.Text, &task.Done)
+			if err != nil {
+				log.Printf("get tasks, err: %v", err.Error())
+				ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
+				return
+			}
+			tasks = append(tasks, task)
+		}
+		if tasks == nil {
+			tasks = []Task{}
+		}
+		ctx.JSON(http.StatusOK, tasks)
+
+	})
+	r.Run()
 }
