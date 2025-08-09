@@ -37,7 +37,7 @@ func main() {
 	r.GET("/tasks", func(ctx *gin.Context) {
 		rows, err := db.Query("SELECT id, text, done FROM tasks")
 		if err != nil {
-			log.Printf("get tasks, err: %v", err.Error())
+			log.Printf("get tasks, err: %v\n", err.Error())
 			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
 			return
 		}
@@ -47,7 +47,7 @@ func main() {
 			var task Task
 			err := rows.Scan(&task.ID, &task.Text, &task.Done)
 			if err != nil {
-				log.Printf("get tasks, err: %v", err.Error())
+				log.Printf("get tasks, err: %v\n", err.Error())
 				ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
 				return
 			}
@@ -57,7 +57,27 @@ func main() {
 			tasks = []Task{}
 		}
 		ctx.JSON(http.StatusOK, tasks)
-
 	})
+
+	r.POST("/tasks", func(ctx *gin.Context) {
+		var task Task
+		if err := ctx.BindJSON(&task); err != nil {
+			log.Printf("POST /tasks empty request")
+			ctx.JSON(http.StatusBadRequest, gin.H{"message": "you provided empty task"})
+			return
+		}
+
+		result, err := db.Exec("INSERT INTO tasks (text) VALUES (?)", task.Text)
+		if err != nil {
+			log.Printf("POST /tasks err: %v\n", err.Error())
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
+			return
+		}
+		id, _ := result.LastInsertId()
+		task.ID = int(id)
+
+		ctx.JSON(http.StatusCreated, task)
+	})
+
 	r.Run()
 }
