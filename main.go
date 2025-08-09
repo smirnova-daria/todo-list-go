@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -84,6 +85,36 @@ func main() {
 		task.ID = int(id)
 
 		ctx.JSON(http.StatusCreated, task)
+	})
+
+	r.DELETE("/tasks/:id", func(ctx *gin.Context) {
+		id, err := strconv.Atoi(ctx.Param("id"))
+		if err != nil {
+			log.Printf("DELETE /tasks/:id err: %v\n", err.Error())
+			ctx.JSON(http.StatusBadRequest, gin.H{"message": "you provided invalid id"})
+			return
+		}
+		var exists bool
+		err = db.QueryRow("SELECT EXISTS(SELECT 1 FROM tasks WHERE id = ?)", id).Scan(&exists)
+		if err != nil {
+			log.Printf("DELETE /tasks/:id err: %v\n", err.Error())
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
+			return
+		}
+		if !exists {
+			log.Printf("DELETE /tasks/:id not found task")
+			ctx.JSON(http.StatusNotFound, gin.H{"message": "task with that id is not found"})
+			return
+		}
+
+		_, err = db.Exec("DELETE FROM tasks WHERE id = ?", id)
+		if err != nil {
+			log.Printf("DELETE /tasks/:id err: %v\n", err.Error())
+			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
+			return
+		}
+
+		ctx.JSON(http.StatusOK, gin.H{"status": "successfully deleted"})
 	})
 
 	r.Run()
