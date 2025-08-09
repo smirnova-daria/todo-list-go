@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	_ "github.com/mattn/go-sqlite3"
@@ -67,7 +68,13 @@ func main() {
 			return
 		}
 
-		result, err := db.Exec("INSERT INTO tasks (text) VALUES (?)", task.Text)
+		if task.Text == "" || strings.TrimSpace(task.Text) == "" {
+			log.Printf("POST /tasks invalid task text")
+			ctx.JSON(http.StatusBadRequest, gin.H{"message": "you provided empty task text"})
+			return
+		}
+
+		result, err := db.Exec("INSERT INTO tasks (text, done) VALUES (?, ?)", task.Text, task.Done)
 		if err != nil {
 			log.Printf("POST /tasks err: %v\n", err.Error())
 			ctx.JSON(http.StatusInternalServerError, gin.H{"message": "something goes wrong, try later"})
